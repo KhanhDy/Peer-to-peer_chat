@@ -17,6 +17,7 @@ from rich.console import Console
 from common.protocol import (
     BOOTSTRAP_ID,
     MSG_ACK,
+    MSG_BROADCAST,
     MSG_CHAT,
     MSG_GET_PEERS,
     MSG_GROUP_CHAT,
@@ -106,6 +107,8 @@ class PeerNode:
         self._seen_messages: Dict[str, float] = {}
         self._seen_ttl = 300
         self._peer_id_cache: set[str] = set()
+        self.broadcast_fanout = 3
+        self.broadcast_ttl = 6
 
     async def run(self) -> None:
         await self._start()
@@ -184,6 +187,13 @@ class PeerNode:
                     await self._handle_group_command(text)
                     continue
 
+                if text.startswith("/broadcast "):
+                    # usage: /broadcast <message>
+                    msg = text[len("/broadcast "):].strip()
+                    if msg:
+                        await self.send_broadcast(msg)
+                    continue
+
                 if text.startswith("/connect "):
                     await self._handle_connect_command(text)
                     continue
@@ -197,6 +207,7 @@ class PeerNode:
         self.console.print("  /web                            - show web ui address")
         self.console.print("  /chat <peer_id> <message>       - send direct message")
         self.console.print("  /group <id1,id2> <message>      - send group message")
+        self.console.print("  /broadcast <message>            - broadcast message to network")
         self.console.print("  /connect <peer_id> <host> <port> - add and connect peer")
         self.console.print("  /exit                           - quit")
 
@@ -483,6 +494,65 @@ class PeerNode:
                 self._publish_metrics()
         return False
 
+    async def send_broadcast(self, text: str, ttl: Optional[int] = None, fanout: Optional[int] = None) -> None:
+        if ttl is None:
+            ttl = self.broadcast_ttl
+        if fanout is None:
+            fanout = self.broadcast_fanout
+        encrypted = self._encrypt(text)
+        event_id = str(uuid.uuid4())
+        event_ts = time.time()
+        payload = {"text": encrypted, "event_id": event_id, "origin": self.peer_id, "timestamp": event_ts, "ttl": int(ttl), "hop_count": 0}
+
+        # mark seen to avoid reprocessing own broadcast
+        self._record_seen(event_id)
+
+        # store outbound broadcast
+        await self._store_message(
+            message_id=event_id,
+            chat_type="broadcast",
+            peer_id=None,
+            group_id=None,
+            group_name=None,
+            sender_id=self.peer_id,
+            recipients=None,
+            direction="out",
+            timestamp=event_ts,
+            text=encrypted,
+            system=False,
+            kind=None,
+        )
+
+        # select initial peers to fanout
+        peers = await self._select_fanout_peers(exclude={self.peer_id}, fanout=fanout)
+        tasks = []
+        for peer in peers:
+            try:
+                writer = await self._ensure_peer_connection(peer.peer_id)
+                if not writer:
+                    continue
+                msg = new_message(MSG_BROADCAST, self.peer_id, to=peer.peer_id, payload=payload)
+                msg.timestamp = event_ts
+                tasks.append(send_message(writer, msg))
+                self.metrics.record_send()
+            except Exception:
+                continue
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._publish_event("message_sent", {"from": self.peer_id, "text": text, "timestamp": event_ts, "chat_type": "broadcast", "message_id": event_id})
+
+    async def _select_fanout_peers(self, exclude: set[str], fanout: int) -> list:
+        peers = await self.peer_list.list_peers(status="online")
+        candidates = [p for p in peers if p.peer_id not in exclude and p.peer_id != self.peer_id and p.writer and not p.writer.is_closing()]
+        if not candidates:
+            return []
+        # random sample up to fanout
+        import random
+
+        if len(candidates) <= fanout:
+            return candidates
+        return random.sample(candidates, fanout)
+
     async def _ensure_peer_connection(self, peer_id: str) -> Optional[asyncio.StreamWriter]:
         peer = await self.peer_list.get_peer(peer_id)
         if not peer:
@@ -607,6 +677,77 @@ class PeerNode:
                     await self._touch_sync_state(msg.from_id, msg.timestamp)
                     self._publish_event("message_received", event_payload)
                     await self._send_ack(writer, msg.message_id, msg.from_id)
+                    continue
+
+                if msg.type == MSG_BROADCAST:
+                    payload = msg.payload if isinstance(msg.payload, dict) else {}
+                    event_id = payload.get("event_id") if isinstance(payload, dict) else None
+                    event_id = event_id or msg.message_id
+                    if not self._record_seen(event_id):
+                        continue
+                    text_raw = payload.get("text") if isinstance(payload, dict) else msg.payload
+                    text_raw = "" if text_raw is None else str(text_raw)
+                    origin = payload.get("origin") if isinstance(payload, dict) else None
+                    ttl = int(payload.get("ttl") or 0) if isinstance(payload, dict) else 0
+                    hop_count = int(payload.get("hop_count") or 0) if isinstance(payload, dict) else 0
+                    text, ok = self._decrypt(text_raw)
+                    if not ok:
+                        text = "[encrypted]"
+                    # record and publish
+                    await self._store_message(
+                        message_id=event_id,
+                        chat_type="broadcast",
+                        peer_id=msg.from_id,
+                        group_id=None,
+                        group_name=None,
+                        sender_id=msg.from_id,
+                        recipients=None,
+                        direction="in",
+                        timestamp=msg.timestamp,
+                        text=text_raw,
+                        system=False,
+                        kind=None,
+                    )
+                    self.metrics.record_receive()
+                    self._publish_metrics()
+                    ev_payload = {
+                        "from": msg.from_id,
+                        "origin": origin,
+                        "text": text,
+                        "timestamp": msg.timestamp,
+                        "chat_type": "broadcast",
+                        "message_id": event_id,
+                        "ttl": ttl,
+                        "hop_count": hop_count,
+                    }
+                    self._publish_event("message_received", ev_payload)
+
+                    # forward if ttl allows
+                    try:
+                        if ttl and ttl > 1:
+                            new_payload = dict(payload)
+                            new_payload["ttl"] = int(ttl) - 1
+                            new_payload["hop_count"] = int(hop_count) + 1
+                            exclude = {msg.from_id, self.peer_id}
+                            if origin:
+                                exclude.add(origin)
+                            peers = await self._select_fanout_peers(exclude=exclude, fanout=self.broadcast_fanout)
+                            tasks = []
+                            for p in peers:
+                                try:
+                                    w = await self._ensure_peer_connection(p.peer_id)
+                                    if not w:
+                                        continue
+                                    fmsg = new_message(MSG_BROADCAST, self.peer_id, to=p.peer_id, payload=new_payload)
+                                    fmsg.timestamp = time.time()
+                                    tasks.append(send_message(w, fmsg))
+                                    self.metrics.record_send()
+                                except Exception:
+                                    continue
+                            if tasks:
+                                await asyncio.gather(*tasks, return_exceptions=True)
+                    except Exception:
+                        pass
                     continue
 
                 if msg.type == MSG_HEARTBEAT:

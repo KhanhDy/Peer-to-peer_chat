@@ -223,7 +223,8 @@ h1 {
     list-style: none;
     padding: 0;
     margin: 0;
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 12px;
 }
 
@@ -232,6 +233,7 @@ h1 {
     min-height: 0;
     overflow: auto;
     padding-right: 6px;
+    justify-content: flex-start;
 }
 
 .list.compact {
@@ -636,6 +638,51 @@ h1 {
     gap: 10px;
     align-items: center;
     animation: rise 0.25s ease;
+}
+
+.toast.broadcast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    z-index: 40;
+    width: min(520px, calc(100vw - 48px));
+    max-width: 520px;
+    min-width: 280px;
+    background: #eaf7f4;
+    border-color: rgba(31, 159, 145, 0.55);
+    color: #135f58;
+    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    backdrop-filter: none;
+}
+
+.toast.broadcast .toast-body {
+    min-width: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.toast.broadcast .toast-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #167a6d;
+}
+
+.toast.broadcast .toast-message {
+    font-size: 15px;
+    line-height: 1.45;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.toast.broadcast .toast-meta {
+    font-size: 12px;
+    color: rgba(19, 95, 88, 0.72);
 }
 
 .toast.warning {

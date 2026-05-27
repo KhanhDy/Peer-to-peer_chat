@@ -68,6 +68,27 @@ class PeerWebServer:
                 return JSONResponse({"ok": False, "error": "send failed"}, status_code=502)
             return JSONResponse({"ok": True})
 
+        @self.app.post("/api/broadcast")
+        async def broadcast(payload: Dict[str, Any]) -> JSONResponse:
+            message = payload.get("message")
+            ttl = payload.get("ttl")
+            fanout = payload.get("fanout")
+            if message is None:
+                return JSONResponse({"ok": False, "error": "message required"}, status_code=400)
+            message = str(message).strip()
+            if not message:
+                return JSONResponse({"ok": False, "error": "message required"}, status_code=400)
+            try:
+                ttl_v = int(ttl) if ttl is not None else None
+            except Exception:
+                ttl_v = None
+            try:
+                fanout_v = int(fanout) if fanout is not None else None
+            except Exception:
+                fanout_v = None
+            await self.node.send_broadcast(message, ttl=ttl_v, fanout=fanout_v)
+            return JSONResponse({"ok": True})
+
         @self.app.post("/api/group")
         async def group(payload: Dict[str, Any]) -> JSONResponse:
             peer_ids = payload.get("peer_ids")

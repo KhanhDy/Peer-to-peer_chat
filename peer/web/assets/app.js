@@ -332,6 +332,7 @@ function renderPeersPage() {
 
 function renderChatList() {
     chatListEl.innerHTML = "";
+    chatListEl.scrollTop = 0;
     const items = [];
     groups.forEach((group) => {
         items.push({ type: "group", id: group.id, label: group.name, peerIds: group.peerIds });
@@ -353,6 +354,7 @@ function renderChatList() {
         empty.textContent = query ? "No matching chats" : "No chats yet";
         empty.className = "empty";
         chatListEl.appendChild(empty);
+        chatListEl.scrollTop = 0;
         return;
     }
 
@@ -381,6 +383,7 @@ function renderChatList() {
         });
         chatListEl.appendChild(item);
     });
+    chatListEl.scrollTop = 0;
     highlightActiveChat();
 }
 
@@ -448,6 +451,41 @@ function showToast(text, variant = "info") {
     setTimeout(() => toast.remove(), 4000);
 }
 
+function showBroadcastPopup(from, text, timestamp = Date.now() / 1000) {
+    const popup = document.createElement("div");
+    popup.className = "toast broadcast";
+
+    const body = document.createElement("div");
+    body.className = "toast-body";
+
+    const title = document.createElement("div");
+    title.className = "toast-title";
+    title.textContent = from || "network";
+
+    const message = document.createElement("div");
+    message.className = "toast-message";
+    message.textContent = text || "";
+
+    const meta = document.createElement("div");
+    meta.className = "toast-meta";
+    const time = new Date(timestamp * 1000);
+    meta.textContent = time.toLocaleTimeString();
+
+    body.appendChild(title);
+    body.appendChild(message);
+    body.appendChild(meta);
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "x";
+    close.addEventListener("click", () => popup.remove());
+
+    popup.appendChild(body);
+    popup.appendChild(close);
+    toastContainer.appendChild(popup);
+    setTimeout(() => popup.remove(), 10000);
+}
+
 async function sendMessage(peerIds, text, meta = {}) {
     const isGroup = peerIds.length > 1 || meta.type === "group";
     const endpoint = isGroup ? "/api/group" : "/api/chat";
@@ -496,6 +534,12 @@ function connectWebSocket() {
         }
         if (data.type === "message_received") {
             const payload = data.payload || {};
+            // handle broadcast messages specially
+            if (payload.chat_type === "broadcast") {
+                const from = payload.origin || payload.from || "network";
+                showBroadcastPopup(from, payload.text, payload.timestamp);
+                return;
+            }
             const isGroup = payload.chat_type === "group" || (Array.isArray(payload.recipients) && payload.recipients.length > 1);
             const isSynced = Boolean(payload.synced);
             if (isGroup) {
@@ -695,10 +739,40 @@ async function announceGroup(group) {
 
 chatForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const text = messageInput.value.trim();
+    const raw = messageInput.value || "";
+    const text = raw.trim();
+
+    // check for broadcast prefix: /bc or /broadcast
+    const bcMatch = text.match(/^\/(?:bc|broadcast)\s+([\s\S]+)/i);
+    if (bcMatch) {
+        const bcText = bcMatch[1].trim();
+        if (!bcText) {
+            showToast("Broadcast message required.", "warning");
+            return;
+        }
+        try {
+            const res = await fetch("/api/broadcast", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: bcText }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) {
+                showToast(data.error || "Broadcast failed.", "error");
+                return;
+            }
+            showBroadcastPopup(selfPeerId, bcText);
+            messageInput.value = "";
+            messageInput.focus();
+        } catch (err) {
+            showToast("Network error.", "error");
+        }
+        return;
+    }
+
     const peerIds = activeChat.peerIds;
     if (!peerIds.length || !text) {
-        showToast("Peer ID and message are required.", "warning");
+        showToast("Peer ID and message required.", "warning");
         return;
     }
     const result = await sendMessage(peerIds, text, activeChat);
