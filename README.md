@@ -1,52 +1,51 @@
-# P2P Chat System
+# Hệ thống Chat P2P
 
-Production-oriented P2P chat system with a bootstrap registry and asyncio-based peers.
+Hệ thống chat P2P gồm một registry bootstrap và các peer triển khai bằng asyncio.
 
-## Features
-- Bootstrap server for peer discovery
-- Peer nodes with bidirectional TCP connections
-- Direct and group chat with ACK and retries
-- Heartbeats and offline detection
-- Peer exchange when bootstrap is unavailable
-- CLI with helpful commands
+## Tính năng
+- Máy chủ bootstrap để khám phá các peer
+- Các node peer với kết nối TCP hai chiều
+- Chat trực tiếp và theo nhóm với ACK và cơ chế retry
+- Heartbeat và phát hiện trạng thái offline
+- Trao đổi peer khi bootstrap không khả dụng
+- CLI với các lệnh hỗ trợ
 
-## Install
+## Cài đặt
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Run
+## Chạy
 
-Start the bootstrap server:
+Khởi động bootstrap server:
 
 ```bash
 python -m bootstrap run --host 0.0.0.0 --port 9000
 ```
 
-Start peers:
+Khởi động peer:
 
 ```bash
 python -m peer run --peer-id peer_a --host 0.0.0.0 --port 5001 --advertise-host <your_device_ip> --bootstrap-host <bootstrap_server_ip> --web-host 0.0.0.0 --web-port 8081
 ```
 
-Notes:
-- `advertise_host` must be reachable by other peers (LAN or public IP). If omitted, the peer will try to auto-detect using the bootstrap/seed target.
-- Open the peer port (e.g. 5001) and web port (e.g. 8081) in the firewall.
-- If you use `.env`, set `P2P_ADVERTISE_HOST` and `P2P_BOOTSTRAP_HOST` per machine.
+Ghi chú:
+- Trường `advertise_host` cần phải truy cập được từ các peer khác (LAN hoặc IP công khai). Nếu không cung cấp, peer sẽ thử tự phát hiện thông qua bootstrap/seed.
+- Nếu sử dụng file `.env`, đặt `P2P_ADVERTISE_HOST` và `P2P_BOOTSTRAP_HOST` tương ứng cho từng máy.
 
 
-## Web UI
+## Giao diện Web (Web UI)
 
-Open the peer UI in a browser:
+Mở giao diện peer trên trình duyệt:
 
 ```
 http://<web_host>:<web_port>
 ```
 
-## Configuration
+## Cấu hình
 
-Optional JSON or YAML config file:
+Ví dụ file cấu hình tùy chọn (JSON hoặc YAML):
 
 ```json
 {
@@ -68,13 +67,13 @@ Optional JSON or YAML config file:
 }
 ```
 
-Run with:
+Chạy với file cấu hình:
 
 ```bash
 python -m peer run --config config.json
 ```
 
-Profile example (config.json):
+Ví dụ profile (config.json):
 
 ```json
 {
