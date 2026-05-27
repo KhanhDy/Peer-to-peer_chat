@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>P2P Peer Console</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+        rel="stylesheet" />
+</head>
+
+<body>
+    <div class="bg">
+        <div class="glow"></div>
+        <div class="grid"></div>
+    </div>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">P2P Peer Console</p>
+                <h1>Realtime Mesh Chat</h1>
+                <p id="peerGreeting" class="peer-greeting">Hello, peer</p>
+            </div>
+            <div class="topbar-actions">
+                <div class="nav-bar">
+                    <button class="nav-button active" data-view="chat">Chat</button>
+                    <button class="nav-button" data-view="peers">Peers</button>
+                    <button class="nav-button" data-view="metrics">Metrics</button>
+                </div>
+                <div class="status" id="status">Connecting...</div>
+            </div>
+        </header>
+
+        <section class="view view-chat" data-view="chat">
+            <div class="chat-layout">
+                <aside class="panel chat-list">
+                    <div class="panel-header">
+                        <h2>Recent</h2>
+                        <button id="newGroup" class="ghost small">New group</button>
+                    </div>
+                    <div class="search-row">
+                        <input id="chatSearch" type="text" placeholder="Search chats" autocomplete="off" />
+                    </div>
+                    <ul id="chatList" class="list compact"></ul>
+                </aside>
+
+                <div class="panel chat-main">
+                    <div class="panel-header chat-header">
+                        <div>
+                            <h2 id="chatTitle">Chat</h2>
+                            <p id="chatSubtitle" class="subtle">Select a peer or group to start.</p>
+                        </div>
+                        <div class="chip" id="chatMode">Direct</div>
+                    </div>
+                    <div id="chatFeed" class="feed"></div>
+                    <form id="chatForm" class="chat-form">
+                        <textarea id="messageInput" rows="1" placeholder="Select a chat to start" autocomplete="off"
+                            disabled></textarea>
+                        <button type="submit" class="primary" disabled>Send</button>
+                    </form>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="view view-peers" data-view="peers" hidden>
+            <div class="panel peers-page">
+                <div class="panel-header">
+                    <h2>Peers</h2>
+                    <button id="refreshPeers" class="ghost">Refresh</button>
+                </div>
+                <ul id="peerList" class="list peers-list"></ul>
+            </div>
+        </section>
+
+        <section class="view view-metrics" data-view="metrics" hidden>
+            <div class="panel metrics-page">
+                <div class="panel-header">
+                    <h2>Metrics</h2>
+                    <button id="refreshMetrics" class="ghost">Refresh</button>
+                </div>
+                <div class="metrics-grid" id="metricsGrid"></div>
+            </div>
+        </section>
+    </main>
+
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+    <div id="groupModal" class="modal" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="groupTitle">
+            <div class="modal-header">
+                <h3 id="groupTitle">Create group chat</h3>
+                <button id="closeGroup" class="ghost small">Close</button>
+            </div>
+            <label class="field">
+                <span>Group name</span>
+                <input id="groupNameInput" type="text" placeholder="Group name" autocomplete="off" />
+            </label>
+            <div id="groupPeerList" class="checklist"></div>
+            <div class="modal-actions">
+                <button id="cancelGroup" class="ghost">Cancel</button>
+                <button id="createGroup" class="primary">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/assets/app.js?v=20260527"></script>
+</body>
+
+</html>
